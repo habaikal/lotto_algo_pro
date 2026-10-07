@@ -163,6 +163,12 @@ td .balls .ball{width:30px;height:30px;font-size:.75rem}
 .bulk-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
 .pager{display:flex;align-items:center;gap:12px;justify-content:center;margin-top:12px;font-size:.85rem;color:var(--dim)}
 #bulkTable .balls{gap:4px}
+.diag-list{display:flex;flex-direction:column;gap:7px}
+.diag-row{display:grid;grid-template-columns:220px 1fr;gap:4px 10px;background:#0a0f1ecc;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:.82rem;align-items:baseline}
+.diag-row small{grid-column:1/-1;color:var(--gold);font-size:.74rem}
+.diag-row.pass b{color:#5eead4}.diag-row.fail{border-color:#f8717155}.diag-row.fail b{color:#fca5a5}.diag-row.warn b{color:var(--gold)}
+.diag-row span{color:var(--dim);font-family:var(--mono);font-size:.76rem}
+@media(max-width:640px){.diag-row{grid-template-columns:1fr}}
 @media(max-width:640px){.rare-grid{grid-template-columns:1fr}}
 /* RESPONSIVE */
 @media(max-width:1024px){

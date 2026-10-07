@@ -93,6 +93,7 @@
           <select id="temperature"><option value="1.0">1.0 샤프</option><option value="1.5" selected>1.5 균형</option><option value="2.2">2.2 발산</option></select>
         </label>
         <button id="regenBtn" class="btn btn-neon">⟳ 양자 재생성</button>
+        <button id="resetBtn" class="btn btn-ghost" title="입력·필터·결과를 기본값으로 되돌립니다">⟲ 초기화</button>
       </div>
     </div>
     <div class="glass card">
@@ -152,6 +153,10 @@
       <div class="card-h"><span>Walk-forward 백테스트 (600회 이후)</span><button id="runBackBtn" class="btn btn-ghost sm">재실행</button></div>
       <div class="back-grid"><div><div id="backAvg" class="big-num">-</div><p class="cap">Top6 평균 적중 (무작위 기대 0.80)</p></div><canvas id="chartBack" height="150"></canvas></div>
       <p class="cap">가중 λ를 키워도 0.80을 유의하게 초과하지 못한다 — 독립시행의 증거. 이 플랫폼은 이 사실을 숨기지 않는다.</p>
+    </div>
+    <div class="glass card">
+      <div class="card-h"><span>자가진단 — 플랫폼 스스로 점검·개선 제안</span><button id="diagBtn" class="btn btn-neon sm">▶ 자가진단 실행</button></div>
+      <div id="diagList" class="diag-list"><p class="cap">버튼을 누르면 데이터·엔진·보안·렌더링 10개 항목을 점검하고, 실패 항목마다 해결책을 함께 보여줍니다.</p></div>
     </div>
   </section>
 

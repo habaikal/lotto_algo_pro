@@ -125,7 +125,7 @@ async function sampleCombos(model,prev,bonus,n,seed,temp,inc,exc,onProgress){
     const rr=rareReject(c,prevS,o);if(rr){rej[rr]=(rej[rr]||0)+1;continue;}
     if(!diverse(c))continue;
     out.push(c);
-    if(onProgress&&(out.length&1023)===0){onProgress(out.length/n);await new Promise(r=>setTimeout(r,0));}
+    if(onProgress&&(out.length&127)===0){onProgress(out.length/n);await new Promise(r=>setTimeout(r,0));}
   }
   out.sort((a,b)=>scoreSum(s,b)-scoreSum(s,a));
   if(onProgress)onProgress(1);
@@ -174,7 +174,7 @@ async function copyText(t){
     let ok=false;try{ok=document.execCommand('copy')}catch(_){}ta.remove();return ok;}
 }
 async function renderCombos(){
-  if(!ROWS.length||!MODEL){$('#comboGrid').innerHTML=dataErrorHTML('학습 데이터 없음');return;}
+  if(!ROWS.length||!MODEL){$('#comboGrid').innerHTML=dataErrorHTML('학습 데이터 없음');bindComboGrid();return;}
   const last=ROWS[ROWS.length-1];
   const want=Math.min(Math.max(1,Math.floor(+$('#comboCount').value)||5),10000);
   const n=planLimit(want);
@@ -276,20 +276,77 @@ function renderLab(){
   const rep=[0,0,0,0,0];for(let i=0;i<ROWS.length-1;i++)rep[Math.min(4,ROWS[i].nums.filter(x=>ROWS[i+1].nums.includes(x)).length)]++;
   bar('#chartRep',rep,{color:'#fbbf24',labels:['0','1','2','3','4+']});
 }
-function runBacktest(){
+/* 초기화: 입력·필터·결과를 기본값으로 */
+function resetAll(){
+  $('#comboCount').value=5;$('#temperature').value='1.5';$('#seedInput').value=7;
+  $('#includeNums').value='';$('#excludeNums').value='';
+  $('#fRun4').checked=true;$('#fOverlap4').checked=true;$('#fParity').checked=false;$('#fSum').checked=false;
+  LAST_GEN=null;PAGE=0;
+  $('#bulkRow').classList.add('hidden');$('#genBar').classList.add('hidden');
+  $('#comboGrid').innerHTML=`<div class="glass combo full"><span class="rank">READY</span>
+    <div class="meta"><span class="chip">초기화됨 — ⟳ 양자 재생성을 누르면 새 예측이 생성됩니다</span></div></div>`;
+  toast('초기화됨 (플랜·학습데이터는 유지)');
+}
+/* 백테스트: 청크 비동기로 UI 프리징 해소 + 진행 표시 */
+let backRunning=false;
+async function runBacktest(){
+  if(backRunning){toast('백테스트 실행 중…');return;}
+  if(!ROWS.length||!MODEL){toast('데이터 없음');return;}
+  backRunning=true;const btn=$('#runBackBtn');if(btn){btn.textContent='실행 중…';btn.disabled=true;}
   const t0=600,hits=[];
-  // subset models for speed: reuse full-model pair counts via incremental? simple loop with cached MODEL on full data would leak; do honest loop on slices (fast enough: 643 * small)
   for(let i=t0;i<ROWS.length-1;i++){
     const sub=buildModel(ROWS.slice(0,i+1));
     const{s}=scoreAll(sub,ROWS[i].nums,ROWS[i].b);
     const top=[...Array(45)].map((_,k)=>k+1).sort((a,b)=>s[b]-s[a]).slice(0,6);
     hits.push(top.filter(x=>ROWS[i+1].nums.includes(x)).length);
+    if((i-t0)%40===0){$('#backAvg').textContent=`${i-t0}/${ROWS.length-1-t0}`;await new Promise(r=>setTimeout(r,0));}
   }
   const avg=hits.reduce((a,b)=>a+b,0)/hits.length;
   $('#backAvg').textContent=avg.toFixed(2)+'개';
   const dist=[0,0,0,0,0,0,0];hits.forEach(h=>dist[h]++);
   bar('#chartBack',dist,{labels:['0','1','2','3','4','5','6']});
+  backRunning=false;if(btn){btn.textContent='재실행';btn.disabled=false;}
   toast(`백테스트 완료: ${avg.toFixed(4)}개 (기대 0.80)`);
+}
+/* 자가진단: 데이터·엔진·보안·렌더링 10항목 + 실패 시 해결책 */
+async function runDiag(){
+  const box=$('#diagList');if(!box)return;
+  box.innerHTML=`<p class="cap">진단 중…</p>`;
+  const rows=[];
+  const put=(name,st,msg,fix)=>rows.push({name,st,msg,fix});
+  put('데이터 파일 로드',ROWS.length>=1000?'pass':'fail',
+    `${ROWS.length}회차`,ROWS.length>=1000?'':'npx serve . 로 실행 후 새로고침');
+  let seq=true;for(let i=1;i<ROWS.length;i++)if(ROWS[i].r!==ROWS[i-1].r+1){seq=false;break;}
+  put('회차 연속성',seq?'pass':'warn',seq?'1~'+(ROWS.length?ROWS[ROWS.length-1].r:'?')+'회 연속':'중간 누락 회차 존재','CSV에 누락 회차 추가');
+  try{
+    const last=ROWS[ROWS.length-1];
+    const r=await sampleCombos(MODEL,last.nums,last.b,5,7,1.5,[],[],null);
+    let ok=r.combos.length===5;
+    for(const c of r.combos){if(c.length!==6||new Set(c).size!==6||!balanced(c)||maxRun(c)>=4)ok=false;}
+    put('엔진 스모크 테스트',ok?'pass':'fail',ok?'5게임 전부 규격 통과':'규격 위반 조합 발생','필터 토글을 기본값으로 되돌린 뒤 재생성');
+  }catch(e){put('엔진 스모크 테스트','fail',String(e).slice(0,60),'데이터 로드 상태 확인');}
+  try{
+    const last=ROWS[ROWS.length-1];const t0=performance.now();
+    await sampleCombos(MODEL,last.nums,last.b,1000,7,1.5,[],[],null);
+    const ms=performance.now()-t0;
+    put('생성 속도 (1000게임)',ms<3000?'pass':'warn',`${ms.toFixed(0)}ms`,ms<3000?'':'저사양 기기 — 10,000게임은 시간이 걸릴 수 있음');
+  }catch(e){put('생성 속도 (1000게임)','fail','측정 실패','데이터 로드 상태 확인');}
+  const need=['comboGrid','regenBtn','resetBtn','genBar','genFill','genTxt','bulkRow','chartFreq','histTable','diagList','countdown'];
+  const miss=need.filter(id=>!document.getElementById(id));
+  put('필수 UI 요소',!miss.length?'pass':'fail',!miss.length?need.length+'개 전부 존재':'누락: '+miss.join(','),'index.html이 최신인지 확인 후 새로고침');
+  put('CSP 메타',document.querySelector('meta[http-equiv="Content-Security-Policy"]')?'pass':'warn',
+    document.querySelector('meta[http-equiv="Content-Security-Policy"]')?'활성':'없음','최신 index.html 배포 확인');
+  let ls='차단됨';try{localStorage.setItem('__t','1');localStorage.removeItem('__t');ls='사용 가능';}catch(e){}
+  put('브라우저 저장소',ls==='사용 가능'?'pass':'warn',ls+'(플랜 기억 기능만 영향)','시크릿모드·쿠키차단 시 플랜이 유지되지 않음');
+  put('실행 프로토콜',location.protocol.startsWith('http')?'pass':'fail',location.protocol,
+    location.protocol.startsWith('http')?'':'file:// 직접 실행 — npx serve . 로 실행');
+  put('공유 API',navigator.share?'pass':'warn',navigator.share?'시스템공유 지원':'미지원 기기 — X·텔레그램 버튼 사용','최신 모바일 브라우저 권장');
+  put('플랜 상한',JSON.stringify(PLAN_MAX)==='{"free":5,"pro":500,"ultra":10000}'?'pass':'warn',`FREE ${PLAN_MAX.free} / PRO ${PLAN_MAX.pro} / ULTRA ${PLAN_MAX.ultra}`,'app.js PLAN_MAX 확인');
+  const sym={pass:'✓',fail:'✗',warn:'!'};
+  const nFail=rows.filter(r=>r.st==='fail').length,nWarn=rows.filter(r=>r.st==='warn').length;
+  box.innerHTML=`<div class="meta" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <span class="chip ${nFail?'hot':''}">${nFail?`실패 ${nFail}건`:'전체 통과'}</span>${nWarn?`<span class="chip">주의 ${nWarn}건</span>`:''}</div>`+
+    rows.map(r=>`<div class="diag-row ${r.st}"><b>${sym[r.st]} ${esc(r.name)}</b><span>${esc(r.msg)}</span>${r.fix?`<small>→ ${esc(r.fix)}</small>`:''}</div>`).join('');
 }
 function renderHistory(filter=''){
   const tb=$('#histTable tbody');const f=filter.trim();
@@ -319,15 +376,26 @@ function stars(){
     g.globalAlpha=1;requestAnimationFrame(loop);})();
 }
 /* plans */
+function markPlanButtons(){
+  document.querySelectorAll('[data-plan]').forEach(x=>{
+    if(!x.dataset.label)x.dataset.label=x.textContent;
+    const active=x.dataset.plan===PLAN;
+    x.textContent=active?'✓ 사용중':x.dataset.label;
+    x.classList.toggle('btn-neon',active&&PLAN!=='free');
+    x.classList.toggle('btn-ghost',!(active&&PLAN!=='free'));
+  });
+}
 function setPlan(p){PLAN=p;storeSet('lqu_plan',p);
   const b=$('#planBadge');b.textContent=p.toUpperCase();b.className='plan-badge '+p;
-  document.querySelectorAll('[data-plan]').forEach(x=>x.textContent='현재 플랜'===x.textContent?'':x.textContent);
+  markPlanButtons();
   toast(p==='ultra'?'ULTRA 활성화: 10,000게임·고정픽·전체표 해제':p==='pro'?'PRO 활성화: 500게임·고정픽 해제':'FREE 플랜');renderCombos();}
 /* boot */
 window.addEventListener('DOMContentLoaded',async()=>{
   stars();setInterval(tick,1000);tick();
   // UI 바인딩을 먼저 해서 데이터 실패 때도 버튼이 죽지 않게 한다
   $('#regenBtn').onclick=()=>{$('#seedInput').value=(+$('#seedInput').value||0)+1;renderCombos();};
+  $('#resetBtn').onclick=resetAll;
+  const dg=document.getElementById('diagBtn');if(dg)dg.onclick=runDiag;
   ['comboCount','temperature','seedInput','includeNums','excludeNums'].forEach(id=>$('#'+id).addEventListener('change',renderCombos));
   const bulk={csvBtn:bulkCSV,txtBtn:bulkTXT,copyAllBtn:copyAll,shareSysBtn:sysShare};
   for(const[id,fn]of Object.entries(bulk)){const el=document.getElementById(id);if(el)el.onclick=fn;}
@@ -337,13 +405,15 @@ window.addEventListener('DOMContentLoaded',async()=>{
   try{
     await loadCSV();MODEL=buildModel(ROWS);
     const b=$('#planBadge');b.textContent=PLAN.toUpperCase();b.className='plan-badge '+PLAN;
+    markPlanButtons();
     renderDraw();renderCombos();renderLab();renderHistory();
   }catch(err){
     console.error(err);
     $('#comboGrid').innerHTML=dataErrorHTML(err.message||'알 수 없음');
     toast('데이터 로드 실패 — 아래 안내대로 로컬 서버로 실행하세요');
   }
-  $('#histSearch').addEventListener('input',e=>renderHistory(e.target.value));
+  let histT=null;
+  $('#histSearch').addEventListener('input',e=>{clearTimeout(histT);histT=setTimeout(()=>renderHistory(e.target.value),200);});
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
     const k=t.dataset.tab;
