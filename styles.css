@@ -157,6 +157,12 @@ td .balls .ball{width:30px;height:30px;font-size:.75rem}
 .switch b{font-size:.85rem}
 .switch small{display:block;color:var(--dim);font-size:.72rem;margin-top:3px;font-family:var(--mono)}
 .combo.full{grid-column:1/-1}
+.genbar{display:flex;align-items:center;gap:12px;padding:12px 18px;margin:14px 0;font-size:.82rem}
+.gen-track{flex:1;height:10px;border-radius:99px;background:#ffffff14;overflow:hidden}
+.gen-track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--vio),var(--mag2));transition:width .15s}
+.bulk-row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.pager{display:flex;align-items:center;gap:12px;justify-content:center;margin-top:12px;font-size:.85rem;color:var(--dim)}
+#bulkTable .balls{gap:4px}
 @media(max-width:640px){.rare-grid{grid-template-columns:1fr}}
 /* RESPONSIVE */
 @media(max-width:1024px){
