@@ -303,7 +303,31 @@ function bindComboGrid(){
   const rt=document.querySelector('#comboGrid [data-act="retry"]');
   if(rt)rt.onclick=()=>location.reload();
 }
-/* 일괄 저장: CSV(엑셀 BOM)·TXT — 개인정보 포함 없음, 순수 번호만 저장 */
+/* 추천 추적 (?ref=): 1주차는 로컬 귀속(최초접촉·90일)만 저장, 집계·리워드는 Phase 2 서버 연동 후 활성화 */
+const REF_KEY='lqu_ref', INV_KEY='lqu_invited_by';
+function rid(n){const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';
+  const r=(globalThis.crypto&&globalThis.crypto.getRandomValues)?globalThis.crypto.getRandomValues(new Uint8Array(n)):null;
+  for(let i=0;i<n;i++){const v=r?r[i]:Math.floor(Math.random()*256);s+=c[v%c.length];}return s;}
+function ownRef(){let c=storeGet(REF_KEY);if(!/^[A-Z0-9]{8}$/.test(c||'')){c=rid(8);storeSet(REF_KEY,c);}return c;}
+function captureRef(){
+  try{
+    const q=new URLSearchParams(location.search||'');const v=(q.get('ref')||'').toUpperCase();
+    if(!/^[A-Z0-9]{4,12}$/.test(v)||v===ownRef())return;
+    const prev=JSON.parse(storeGet(INV_KEY)||'null'),now=Date.now();
+    if(prev&&now-prev.at<90*864e5)return;
+    storeSet(INV_KEY,JSON.stringify({by:v,at:now}));
+  }catch(e){}
+}
+function invitedBy(){try{const p=JSON.parse(storeGet(INV_KEY)||'null');
+  return p&&Date.now()-p.at<90*864e5?p.by:'';}catch(e){return '';}}
+function shareURL(){try{const u=new URL(location.href);
+  if(u.protocol.startsWith('http'))return u.origin+u.pathname+'?ref='+ownRef();}catch(e){}
+  return String(location.href||'').split('?')[0]+'?ref='+ownRef();}
+function renderInvite(){
+  const mc=$('#myRefCode');if(mc)mc.textContent=ownRef();
+  const il=$('#invitedByLine');
+  if(il){const b=invitedBy();il.textContent=b?`초대 코드 ${b} 경유로 방문했습니다`:'';}
+}
 function stampName(ext){const d=new Date(),p=v=>String(v).padStart(2,'0');
   return`lotto-${LAST_GEN?LAST_GEN.target:''}game-ultra-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${ext}`;}
 function download(name,content,type){
@@ -324,11 +348,11 @@ async function copyAll(){if(!LAST_GEN)return;
 /* SNS 전송: 공유 텍스트에 개인정보 없음. 대량은 Top5 요약 + 페이지 링크 공유 */
 function shareText(){if(!LAST_GEN)return'';
   const top=LAST_GEN.combos.slice(0,5).map((c,i)=>`${i+1}게임 ${c.join(',')}`).join('\n');
-  return`[LOTTO QUANTUM ULTRA] ${LAST_GEN.target}회 예측 Top5\n${top}\n#로또예측 ${location.href}`;}
+  return`[LOTTO QUANTUM ULTRA] ${LAST_GEN.target}회 예측 Top5\n${top}\n#로또예측 ${shareURL()}`;}
 async function sysShare(){const t=shareText();if(!t)return;
   if(navigator.share){try{await navigator.share({title:'LOTTO QUANTUM ULTRA',text:t});}catch(e){}}
   else window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(t),'_blank','noopener');}
-function snsShare(net){const t=shareText();if(!t)return;const u=encodeURIComponent(location.href),x=encodeURIComponent(t);
+function snsShare(net){const t=shareText();if(!t)return;const u=encodeURIComponent(shareURL()),x=encodeURIComponent(t);
   const url=net==='x'?'https://twitter.com/intent/tweet?text='+x
     :net==='tg'?'https://t.me/share/url?url='+u+'&text='+x
     :'https://www.facebook.com/sharer/sharer.php?u='+u;
@@ -473,6 +497,13 @@ window.addEventListener('DOMContentLoaded',async()=>{
   for(const[id,fn]of Object.entries(bulk)){const el=document.getElementById(id);if(el)el.onclick=fn;}
   const sns={shareXBtn:'x',shareTgBtn:'tg',shareFbBtn:'fb'};
   for(const[id,net]of Object.entries(sns)){const el=document.getElementById(id);if(el)el.onclick=()=>snsShare(net);}
+  captureRef();renderInvite();
+  const crb=document.getElementById('copyRefBtn');
+  if(crb)crb.onclick=async()=>{toast(await copyText(shareURL())?'초대 주소 복사됨':'복사 실패');};
+  const sib=document.getElementById('shareInviteBtn');
+  if(sib)sib.onclick=async()=>{const t=`[LOTTO QUANTUM ULTRA] 수축 마르코프 로또 분석 플랫폼\n${shareURL()}`;
+    if(navigator.share){try{await navigator.share({title:'LOTTO QUANTUM ULTRA',text:t});}catch(e){}}
+    else window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(t),'_blank','noopener');};
   const entry={addDrawBtn:addDraw,exportCsvBtn:exportMergedCSV,clearCustomBtn:clearCustom};
   for(const[id,fn]of Object.entries(entry)){const el=document.getElementById(id);if(el)el.onclick=fn;}
   const nr=document.getElementById('newNums');if(nr)nr.addEventListener('keydown',e=>{if(e.key==='Enter')addDraw();});

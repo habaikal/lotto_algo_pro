@@ -189,3 +189,10 @@ td .balls .ball{width:30px;height:30px;font-size:.75rem}
   .nav{padding:8px 12px}
   .brand-txt{font-size:.85rem}
 }
+
+.invite-strip{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.invite-strip>div:first-child{flex:1;min-width:220px}
+.invite-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.refcode{background:#0008;border:1px dashed var(--gold);border-radius:10px;padding:8px 14px;color:var(--gold);letter-spacing:.15em}
+#invitedByLine{flex-basis:100%;color:var(--cyan)}
+

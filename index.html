@@ -202,6 +202,13 @@
       <div class="glass card plan"><h3>PRO</h3><div class="price">₩4,900<span>/월</span></div><ul><li>최대 500게임 생성</li><li>포함/제외 3개까지</li><li>백테스트 요약</li></ul><button class="btn btn-ghost" data-plan="pro">PRO 활성화 (데모)</button></div>
     </div>
     <p class="cap center">* 데모 결제: 실제 과금 없이 플랜이 브라우저에 저장됩니다. 실서비스 전환 시 토스페이먼츠/Stripe 위젯을 이 버튼에 연결하면 됩니다.</p>
+    <div class="glass card invite-strip">
+      <div><b>친구 초대</b> <span class="cap">공유 주소에 내 초대 코드가 자동 포함됩니다. 집계·리워드는 Phase 2 서버 연동 후 활성화됩니다.</span></div>
+      <div class="invite-right"><span class="mono refcode" id="myRefCode">-</span>
+        <button id="copyRefBtn" class="btn btn-ghost sm">코드 복사</button>
+        <button id="shareInviteBtn" class="btn btn-neon sm">초대 공유</button></div>
+      <div class="cap" id="invitedByLine"></div>
+    </div>
   </section>
 
   <footer class="footer glass">

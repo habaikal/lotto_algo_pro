@@ -1,0 +1,47 @@
+name: lotto-data
+
+on:
+  schedule:
+    # 매주 토요일 21:05 KST(=12:05 UTC, 추첨 20:35 이후) 무결성 검사
+    - cron: "5 12 * * 6"
+  workflow_dispatch:
+    inputs:
+      round:
+        description: "추가할 회차 (예: 1245, 비우면 검사만)"
+        required: false
+        default: ""
+      numbers:
+        description: "당첨번호 6개 (예: 3,11,18,27,34,42)"
+        required: false
+        default: ""
+      bonus:
+        description: "보너스 번호"
+        required: false
+        default: ""
+  push:
+    paths:
+      - "lotto_results.csv"
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Append draw (dispatch only)
+        if: inputs.round != ''
+        run: python scripts/update_lotto.py --add "${{ inputs.round }}" "${{ inputs.numbers }}" "${{ inputs.bonus }}"
+      - name: Validate CSV
+        run: python scripts/update_lotto.py --check
+      - name: Commit and push
+        run: |
+          git config user.name "lotto-data-bot"
+          git config user.email "lotto-data-bot@users.noreply.github.com"
+          git add lotto_results.csv
+          git diff --cached --quiet || git commit -m "data: append lotto draw"
+          git push
