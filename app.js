@@ -87,7 +87,7 @@ function refreshTitles(){
 function rebuildAll(){
   for(const k in scoreCache)delete scoreCache[k];
   MODEL=buildModel(ROWS);
-  refreshTitles();renderCustomList();renderDraw();renderCombos();renderLab();renderHistory();
+  refreshTitles();renderCustomList();renderDraw();showReady('데이터 준비 완료 — ⟳ 양자 재생성을 누르면 예측이 생성됩니다');renderLab();renderHistory();
 }
 function renderCustomList(){
   const box=$('#customList');if(!box)return;
@@ -154,7 +154,7 @@ function parseNums(str){return(str||'').split(/[, ]+/).map(Number).filter(n=>n>=
    이 필터는 기대값 향상이 아니라 슬롯 정리 기능이다. */
 const maxRun=c=>{let m=1,cur=1;for(let i=1;i<c.length;i++){if(c[i]===c[i-1]+1){cur++;m=Math.max(m,cur);}else cur=1;}return m;};
 const rareOpts=()=>({run4:$('#fRun4')?.checked??true, overlap4:$('#fOverlap4')?.checked??true,
-  parity:$('#fParity')?.checked??false, sum:$('#fSum')?.checked??false});
+  parity:$('#fParity')?.checked??true, sum:$('#fSum')?.checked??true});
 function rareReject(c,prevS,o){
   if(o.run4&&maxRun(c)>=4)return'연속4+';
   if(o.overlap4&&c.filter(x=>prevS.has(x)).length>=4)return'직전중복4+';
@@ -344,15 +344,19 @@ function renderLab(){
   const rep=[0,0,0,0,0];for(let i=0;i<ROWS.length-1;i++)rep[Math.min(4,ROWS[i].nums.filter(x=>ROWS[i+1].nums.includes(x)).length)]++;
   bar('#chartRep',rep,{color:'#fbbf24',labels:['0','1','2','3','4+']});
 }
-/* 초기화: 입력·필터·결과를 기본값으로 */
-function resetAll(){
-  $('#comboCount').value=5;$('#temperature').value='1.5';$('#seedInput').value=7;
-  $('#includeNums').value='';$('#excludeNums').value='';
-  $('#fRun4').checked=true;$('#fOverlap4').checked=true;$('#fParity').checked=false;$('#fSum').checked=false;
+/* READY 상태: 생성 버튼을 누르기 전에는 항상 빈 초기화 화면 */
+function showReady(msg){
   LAST_GEN=null;PAGE=0;
   $('#bulkRow').classList.add('hidden');$('#genBar').classList.add('hidden');
   $('#comboGrid').innerHTML=`<div class="glass combo full"><span class="rank">READY</span>
-    <div class="meta"><span class="chip">초기화됨 — ⟳ 양자 재생성을 누르면 새 예측이 생성됩니다</span></div></div>`;
+    <div class="meta"><span class="chip">${esc(msg)}</span></div></div>`;
+}
+/* 초기화: 입력·필터·결과를 기본값으로 (희귀패턴 4종 전부 ON) */
+function resetAll(){
+  $('#comboCount').value=5;$('#temperature').value='1.5';$('#seedInput').value=7;
+  $('#includeNums').value='';$('#excludeNums').value='';
+  $('#fRun4').checked=true;$('#fOverlap4').checked=true;$('#fParity').checked=true;$('#fSum').checked=true;
+  showReady('초기화됨 — ⟳ 양자 재생성을 누르면 새 예측이 생성됩니다');
   toast('초기화됨 (플랜·학습데이터는 유지)');
 }
 /* 백테스트: 청크 비동기로 UI 프리징 해소 + 진행 표시 */
@@ -456,7 +460,7 @@ function markPlanButtons(){
 function setPlan(p){PLAN=p;storeSet('lqu_plan',p);
   const b=$('#planBadge');b.textContent=p.toUpperCase();b.className='plan-badge '+p;
   markPlanButtons();
-  toast(p==='ultra'?'ULTRA 활성화: 10,000게임·고정픽·전체표 해제':p==='pro'?'PRO 활성화: 500게임·고정픽 해제':'FREE 플랜');renderCombos();}
+  toast(p==='ultra'?'ULTRA 활성화: 10,000게임·고정픽·전체표 해제':p==='pro'?'PRO 활성화: 500게임·고정픽 해제':'FREE 플랜');if(LAST_GEN)renderCombos();}
 /* boot */
 window.addEventListener('DOMContentLoaded',async()=>{
   stars();setInterval(tick,1000);tick();
@@ -464,7 +468,7 @@ window.addEventListener('DOMContentLoaded',async()=>{
   $('#regenBtn').onclick=()=>{$('#seedInput').value=(+$('#seedInput').value||0)+1;renderCombos();};
   $('#resetBtn').onclick=resetAll;
   const dg=document.getElementById('diagBtn');if(dg)dg.onclick=runDiag;
-  ['comboCount','temperature','seedInput','includeNums','excludeNums'].forEach(id=>$('#'+id).addEventListener('change',renderCombos));
+  ['comboCount','temperature','seedInput','includeNums','excludeNums'].forEach(id=>$('#'+id).addEventListener('change',()=>{if(LAST_GEN)renderCombos();}));
   const bulk={csvBtn:bulkCSV,txtBtn:bulkTXT,copyAllBtn:copyAll,shareSysBtn:sysShare};
   for(const[id,fn]of Object.entries(bulk)){const el=document.getElementById(id);if(el)el.onclick=fn;}
   const sns={shareXBtn:'x',shareTgBtn:'tg',shareFbBtn:'fb'};
@@ -472,14 +476,14 @@ window.addEventListener('DOMContentLoaded',async()=>{
   const entry={addDrawBtn:addDraw,exportCsvBtn:exportMergedCSV,clearCustomBtn:clearCustom};
   for(const[id,fn]of Object.entries(entry)){const el=document.getElementById(id);if(el)el.onclick=fn;}
   const nr=document.getElementById('newNums');if(nr)nr.addEventListener('keydown',e=>{if(e.key==='Enter')addDraw();});
-  ['fRun4','fOverlap4','fParity','fSum'].forEach(id=>$('#'+id)?.addEventListener('change',renderCombos));
+  ['fRun4','fOverlap4','fParity','fSum'].forEach(id=>$('#'+id)?.addEventListener('change',()=>{if(LAST_GEN)renderCombos();}));
   try{
     await loadCSV();
     ROWS=mergeRows(BASE_ROWS,loadCustomDraws());
     MODEL=buildModel(ROWS);
     const b=$('#planBadge');b.textContent=PLAN.toUpperCase();b.className='plan-badge '+PLAN;
     markPlanButtons();refreshTitles();
-    renderDraw();renderCombos();renderLab();renderHistory();renderCustomList();
+    renderDraw();showReady('데이터 준비 완료 — ⟳ 양자 재생성을 누르면 예측이 생성됩니다');renderLab();renderHistory();renderCustomList();
   }catch(err){
     console.error(err);
     $('#comboGrid').innerHTML=dataErrorHTML(err.message||'알 수 없음');
