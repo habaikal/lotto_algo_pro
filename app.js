@@ -4,6 +4,7 @@ const CFG = { aBase:10, aPair:20, aBonus:10, lPrev:0.6, lBonus:0.3, lTrend:0.01,
 const storeGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const storeSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 let ROWS=[], MODEL=null, PLAN=storeGet('lqu_plan')||'free';
+let BASE_ROWS=[];
 const $=s=>document.querySelector(s);
 const ballCls=n=>n<=10?'b1':n<=20?'b2':n<=30?'b3':n<=40?'b4':'b5';
 const ballsHTML=(nums,bonus)=>nums.map(n=>`<span class="ball ${ballCls(n)}">${n}</span>`).join('');
@@ -18,8 +19,8 @@ async function loadCSV(){
   if(!res.ok)throw new Error('CSV HTTP '+res.status);
   const t=await res.text();
   const lines=t.trim().split(/\r?\n/).slice(1);
-  ROWS=lines.map(l=>{const p=l.split(',').map(Number);return{r:p[0],nums:[p[1],p[2],p[3],p[4],p[5],p[6]].sort((a,b)=>a-b),b:p[7]}}).filter(x=>x.nums.length===6).sort((a,b)=>a.r-b.r);
-  if(!ROWS.length)throw new Error('CSV 파싱 결과 0건');
+  BASE_ROWS=lines.map(l=>{const p=l.split(',').map(Number);return{r:p[0],nums:[p[1],p[2],p[3],p[4],p[5],p[6]].sort((a,b)=>a-b),b:p[7]}}).filter(x=>x.nums.length===6).sort((a,b)=>a.r-b.r);
+  if(!BASE_ROWS.length)throw new Error('CSV 파싱 결과 0건');
 }
 function dataErrorHTML(msg){
   return`<div class="glass combo full"><span class="rank">DATA ERROR</span>
@@ -57,7 +58,74 @@ function scoreAll(model,prev,bonus){
     v+=CFG.lTrend*model.trend[x];s[x]=v;d[x]={base:b,pm,pb};}
   return{s,d};
 }
-/* 출력 이스케이프: 사용자 입력이 DOM에 닿는 모든 경로 차단 (XSS 예방) */
+/* 신규 회차 반영: CSV 기준 + 사용자 추가분 병합. 추가분은 브라우저에 저장.
+   예측 타깃은 항상 max(회차)+1 로 자동 이동한다. */
+const CUSTOM_KEY='lqu_custom';
+function loadCustomDraws(){
+  try{
+    const j=JSON.parse(storeGet(CUSTOM_KEY)||'[]');
+    if(!Array.isArray(j))return[];
+    return j.filter(d=>d&&Number.isInteger(d.r)&&d.r>0&&Array.isArray(d.nums)&&d.nums.length===6
+      &&d.nums.every(x=>Number.isInteger(x)&&x>=1&&x<=45)&&new Set(d.nums).size===6
+      &&Number.isInteger(d.b)&&d.b>=1&&d.b<=45&&!d.nums.includes(d.b))
+      .map(d=>({r:d.r,nums:[...d.nums].sort((a,b)=>a-b),b:d.b}));
+  }catch(e){return[];}
+}
+function saveCustomDraws(list){storeSet(CUSTOM_KEY,JSON.stringify(list));}
+function mergeRows(base,custom){
+  const m=new Map(base.map(r=>[r.r,{r:r.r,nums:[...r.nums],b:r.b}]));
+  for(const c of custom)m.set(c.r,{r:c.r,nums:[...c.nums],b:c.b});
+  return[...m.values()].sort((a,b)=>a.r-b.r);
+}
+function refreshTitles(){
+  if(!ROWS.length)return;
+  const last=ROWS[ROWS.length-1];
+  const pt=$('#predictTitle');if(pt)pt.textContent=`${last.r+1}회 ULTRA 예측 코어`;
+  const hp=$('#heroPill');if(hp)hp.innerHTML=`<i></i>${last.r}회차 학습 완료`;
+  const nr=$('#newRound');if(nr&&!nr.value)nr.value=last.r+1;
+}
+function rebuildAll(){
+  for(const k in scoreCache)delete scoreCache[k];
+  MODEL=buildModel(ROWS);
+  refreshTitles();renderCustomList();renderDraw();renderCombos();renderLab();renderHistory();
+}
+function renderCustomList(){
+  const box=$('#customList');if(!box)return;
+  const list=loadCustomDraws().sort((a,b)=>b.r-a.r);
+  box.innerHTML=(list.length?`<span class="chip hot">추가 반영 ${list.length}건</span>`:`<span class="chip">추가 반영 없음 (CSV 기준)</span>`)+
+    list.map(d=>`<span class="chip">${d.r}회 ${d.nums.join(',')}+${d.b} <a href="#" data-del="${d.r}" style="color:#fca5a5">삭제</a></span>`).join(' ');
+  box.querySelectorAll('[data-del]').forEach(a=>a.onclick=e=>{e.preventDefault();
+    saveCustomDraws(loadCustomDraws().filter(d=>d.r!==+a.dataset.del));
+    ROWS=mergeRows(BASE_ROWS,loadCustomDraws());rebuildAll();toast('삭제됨 — 모델 재학습 완료');});
+}
+function addDraw(){
+  const r=Math.floor(+$('#newRound').value);
+  const nums=[...new Set(parseNums($('#newNums').value))].sort((a,b)=>a-b);
+  const b=Math.floor(+$('#newBonus').value);
+  if(!Number.isInteger(r)||r<=0)return toast('회차를 확인하세요 (1 이상의 정수)');
+  if(nums.length!==6)return toast('당첨번호 6개를 쉼표로 입력하세요 (1~45, 중복 불가)');
+  if(!Number.isInteger(b)||b<1||b>45)return toast('보너스 번호를 입력하세요 (1~45)');
+  if(nums.includes(b))return toast('보너스는 당첨번호 6개와 달라야 합니다');
+  const list=loadCustomDraws().filter(d=>d.r!==r);const overwrote=list.length!==loadCustomDraws().length;
+  list.push({r,nums,b});saveCustomDraws(list);
+  ROWS=mergeRows(BASE_ROWS,loadCustomDraws());rebuildAll();
+  $('#newNums').value='';$('#newBonus').value='';
+  const last=ROWS[ROWS.length-1];$('#newRound').value=last.r+1;
+  toast(`${r}회 반영${overwrote?' (덮어씀)':''} → ${last.r+1}회 예측 모드`);
+}
+function exportMergedCSV(){
+  if(!ROWS.length)return;
+  const body=ROWS.map(r=>[r.r,...r.nums,r.b].join(',')).join('\n');
+  download(`lotto_results_merged_${ROWS[ROWS.length-1].r}.csv`,'회차,번호1,번호2,번호3,번호4,번호5,번호6,보너스\n'+body,'text/csv;charset=utf-8');
+  toast('병합 CSV 저장 — lotto_results.csv 교체용');
+}
+let clearArmed=false;
+function clearCustom(){
+  if(!clearArmed){clearArmed=true;$('#clearCustomBtn').textContent='정말 초기화? 다시 클릭';
+    setTimeout(()=>{clearArmed=false;const el=$('#clearCustomBtn');if(el)el.textContent='추가분 초기화';},3000);return;}
+  clearArmed=false;$('#clearCustomBtn').textContent='추가분 초기화';
+  saveCustomDraws([]);ROWS=mergeRows(BASE_ROWS,[]);rebuildAll();toast('추가분 초기화 — CSV 기준으로 복귀');
+}
 const esc=v=>String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const balanced=c=>{const s=c.reduce((a,b)=>a+b,0),o=c.filter(v=>v%2).length,l=c.filter(v=>v<=22).length;
   return s>=CFG.balSum[0]&&s<=CFG.balSum[1]&&o>=CFG.balOdd[0]&&o<=CFG.balOdd[1]&&l>=CFG.balLow[0]&&l<=CFG.balLow[1];};
@@ -401,12 +469,17 @@ window.addEventListener('DOMContentLoaded',async()=>{
   for(const[id,fn]of Object.entries(bulk)){const el=document.getElementById(id);if(el)el.onclick=fn;}
   const sns={shareXBtn:'x',shareTgBtn:'tg',shareFbBtn:'fb'};
   for(const[id,net]of Object.entries(sns)){const el=document.getElementById(id);if(el)el.onclick=()=>snsShare(net);}
+  const entry={addDrawBtn:addDraw,exportCsvBtn:exportMergedCSV,clearCustomBtn:clearCustom};
+  for(const[id,fn]of Object.entries(entry)){const el=document.getElementById(id);if(el)el.onclick=fn;}
+  const nr=document.getElementById('newNums');if(nr)nr.addEventListener('keydown',e=>{if(e.key==='Enter')addDraw();});
   ['fRun4','fOverlap4','fParity','fSum'].forEach(id=>$('#'+id)?.addEventListener('change',renderCombos));
   try{
-    await loadCSV();MODEL=buildModel(ROWS);
+    await loadCSV();
+    ROWS=mergeRows(BASE_ROWS,loadCustomDraws());
+    MODEL=buildModel(ROWS);
     const b=$('#planBadge');b.textContent=PLAN.toUpperCase();b.className='plan-badge '+PLAN;
-    markPlanButtons();
-    renderDraw();renderCombos();renderLab();renderHistory();
+    markPlanButtons();refreshTitles();
+    renderDraw();renderCombos();renderLab();renderHistory();renderCustomList();
   }catch(err){
     console.error(err);
     $('#comboGrid').innerHTML=dataErrorHTML(err.message||'알 수 없음');

@@ -168,7 +168,9 @@ td .balls .ball{width:30px;height:30px;font-size:.75rem}
 .diag-row small{grid-column:1/-1;color:var(--gold);font-size:.74rem}
 .diag-row.pass b{color:#5eead4}.diag-row.fail{border-color:#f8717155}.diag-row.fail b{color:#fca5a5}.diag-row.warn b{color:var(--gold)}
 .diag-row span{color:var(--dim);font-family:var(--mono);font-size:.76rem}
-@media(max-width:640px){.diag-row{grid-template-columns:1fr}}
+.entry-grid{display:grid;grid-template-columns:110px 1fr 110px auto;gap:12px;align-items:end}
+.entry-grid .wide{min-width:0}
+@media(max-width:640px){.entry-grid{grid-template-columns:1fr 1fr}.entry-grid .wide{grid-column:1/-1}.diag-row{grid-template-columns:1fr}}
 @media(max-width:640px){.rare-grid{grid-template-columns:1fr}}
 /* RESPONSIVE */
 @media(max-width:1024px){
